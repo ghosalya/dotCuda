@@ -171,7 +171,7 @@ class VQA:
             ann['image_id']      = qaAnn['image_id'] 
             ann['question_type'] = qaAnn['question_type']
             ann['answer_type']   = qaAnn['answer_type']
-        print ('DONE (t={0.2f}s)'.format((datetime.datetime.utcnow() - time_t).total_seconds()))
+        print ('DONE (t={0:.2f}s)'.format((datetime.datetime.utcnow() - time_t).total_seconds()) )
 
         res.dataset['annotations'] = anns
         res.createIndex()
