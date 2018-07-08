@@ -53,6 +53,8 @@ def build_vocab(annfile, quesfile, threshold):
         vocab.add_word(word)
     return vocab
 
+
+# main is not used
 def main(args):
     vocab = build_vocab(json=args.caption_path, threshold=args.threshold)
     vocab_path = args.vocab_path
