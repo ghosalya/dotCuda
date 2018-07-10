@@ -7,6 +7,15 @@ import torchvision.models as models
 # Image Embed (Resnet152) 
 '''  
 
+# COMMENTS
+
+# self.resnet_back is not used
+
+# num_classes = 1000 doesn't exist for our use case:
+# we don't have 1000 image classifications, just 1000 arbitrary classes
+# this particular fc isn't actually useful because we have 
+# another fc layer nn.linear(image_ftrs + question_ftrs, 1024) in ConcatNet
+
 class ImageEmbedding(nn.Module):
     def __init__(self, mode = 'train'): #1024 or 1000?
         super(ImageEmbedding, self).__init__()
@@ -22,6 +31,7 @@ class ImageEmbedding(nn.Module):
         self.resnet_back_pool = nn.AvgPool2d(kernel_size = 10, stride=1, padding=0) #1, 2048, 1, 1
         self.resnet_back_fc = nn.Linear(2048, 1000)
         #predefined: num_classes = 1000
+    
     
     def forward(self, image):
         # print ("start")
