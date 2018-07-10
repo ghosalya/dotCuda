@@ -1,7 +1,9 @@
+import torch
 import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 import torch.nn.functional as F
 import torchvision.models as models
+from torch.nn.utils.rnn import PackedSequence
 
 '''
 # Image Embed (Resnet152) 
@@ -20,7 +22,7 @@ class ImageEmbedding(nn.Module):
     def __init__(self, mode = 'train'): #1024 or 1000?
         super(ImageEmbedding, self).__init__()
         #get the first 0-7 layers ; delete the avgpool and fc layers
-        self.resnet_front = models.resnet152(pretrained=True)
+        resnet = models.resnet152(pretrained=True)
         modules_front = list(resnet.children())[0:8]      
         self.resnet_front = nn.Sequential(*modules_front)
         
@@ -51,7 +53,7 @@ class QnsEmbedding(nn.Module):
         self.question_ftrs = question_ftrs
         
     def forward (self, inputs, cache):
-        inputs = self.tanh(inputs)
+        #inputs = self.tanh(inputs) # TODO: incorporate
         output, (hn, cn) = self.lstm(inputs, cache)
         return hn, cn
         
@@ -66,25 +68,28 @@ class QnsEmbedding(nn.Module):
 '''    
 
 class ConcatNet(nn.Module):
-    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, mode = 'train'):
+    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, lstm_layers=1, mode = 'train'):
+        super(ConcatNet, self).__init__()
         self.mode = mode
-        self.img_channel = ImageEmbedding(image_ftrs = emb_size, mode = mode)
-        self.qns_channel = QnsEmbedding(input_size, question_ftrs, num_layers, batch_first = True)
+        self.img_channel = ImageEmbedding(mode = mode)
+        self.qns_channel = QnsEmbedding(word_emb_size, question_ftrs=emb_size, num_layers=lstm_layers, batch_first = True)
         
         self.word_emb_size = word_emb_size
         #vocab_size: size of dictionary embeddings, word_emb_size: size of each embedding vector
         self.word_embeddings = nn.Embedding(vocab_size, word_emb_size)
-        
-        self.all = nn.Sequential(nn.Dropout(0.5), nn.Linear(image_ftrs + question_ftrs, 1024), 
+        self.all = nn.Sequential(nn.Dropout(0.5), nn.Linear(2048 + emb_size, 1024), 
                                 nn.ReLU(), 
                                 nn.Linear(1024, 3000), 
                                 nn.Softmax(dim = 0))
         
     def forward(self, image, questions):
         image_embed = self.img_channel(image) #returns tensor
-        embeds = self.word_embeddings(questions)
-        questions_embed = self.qns_channel(embeds)
-        added = torch.cat((image_embed,questions_embed), 0) #concat the img and qns layers
+        emb_qns = self.word_embeddings(questions.data)
+        embeds = PackedSequence(emb_qns, questions.batch_sizes)
+        cache = self.qns_channel.init_cache(batch=questions.batch_sizes[0])
+        questions_embed, _ = self.qns_channel(embeds, cache)
+        questions_embed = questions_embed[-1]
+        added = torch.cat((image_embed,questions_embed), 1) #concat the img and qns layers
         output = self.all(added)
         return output
     

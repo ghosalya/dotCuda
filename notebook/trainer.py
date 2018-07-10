@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 class VQATrainer:
-    def __init__(self, model, device, accuracy_fn='approve3'):
+    def __init__(self, model, device, accuracy_fn='approve3t'):
         self.model = model
         self.criterion = torch.nn.CrossEntropyLoss()
         self.device = device
@@ -20,37 +20,44 @@ class VQATrainer:
         self.accuracy_fn = accuracy_fn_list[accuracy_fn]
         self.statistics = {}
 
-    def train(self, train_dataset, val_dataset, epoch=5, learnrate=1e-2):
+    def train(self, train_dataset, val_dataset, epoch=5, learnrate=1e-2, collate_fn=None, e_break=None):
         '''
         Train over many epoch, outputing test result
         in between
         '''
         sgd_optimizer = torch.optim.SGD(self.model.parameters(), learnrate)
 
-        train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=4)
-        val_loader = DataLoader(val_dataset, batch_size=8, shuffle=True, num_workers=4)
+        if collate_fn:
+            train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=4, collate_fn=collate_fn)
+            val_loader = DataLoader(val_dataset, batch_size=8, shuffle=True, num_workers=4, collate_fn=collate_fn)
+        else:
+            train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=4)
+            val_loader = DataLoader(val_dataset, batch_size=8, shuffle=True, num_workers=4)
 
         self.statistics = {'train-losses':[],
                            'val-losses': [],
                            'train-accuracy': [],
-                           'val_accuracy': []}
+                           'val-accuracy': []}
 
         for e in range(epoch):
             # training phase
             print('Epoch {} of {}'.format(e, epoch))
             print('  Training...')
-            self.model, train_loss, train_acc = self.train_epoch(train_loader, optimizer=sgd_optimizer)
+            self.model, train_loss, train_acc = self.train_epoch(train_loader, optimizer=sgd_optimizer, e_break=e_break)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
             # validation phase
             print('  Validating...')
-            self.model, val_loss, val_acc = self.test_epoch(val_loader)
+            self.model, val_loss, val_acc = self.test_epoch(val_loader, e_break=e_break)
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
+            
+            
+            torch.save(self.model.state_dict(), './model_epoch{}.pt'.format(e))
 
         return self.model, self.statistics
 
-    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1):
+    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1, e_break=None):
         '''
         Train function fro one epoch, returning the model, loss & accuracy
         '''
@@ -69,9 +76,9 @@ class VQATrainer:
             iterr += 1
 
             # wrapping data
-            image = Variable(data['image'].to(self.device))
-            question = Variable(data['question'].to(self.device))
-            labels = data['label'].to(self.device)
+            question = data[0].long().cuda()
+            image = data[1].to(self.device)
+            labels = [dat.to(self.device) for dat in data[2]]
 
             # forward pass
             self.model.zero_grad()
@@ -81,12 +88,14 @@ class VQATrainer:
             total_loss = None
             for i, label in enumerate(labels): # loop by batch
                 one_data_loss = None
-                for j in range(label.size().item()):
-                    if total_loss is None:
-                        one_data_loss = self.criterion(outputs, label[j])
+                if list(label.size())[0] < 3:
+                    continue
+                for j in range(list(label.size())[0]):
+                    if one_data_loss is None:
+                        one_data_loss = self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
                     else:
-                        one_data_loss += self.criterion(outputs, label[j])
-                one_data_loss = one_data_loss / label.size()
+                        one_data_loss += self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
+                one_data_loss = one_data_loss / list(label.size())[0]
                 # assigning to total loss
                 if total_loss is None:
                     total_loss = one_data_loss
@@ -96,7 +105,7 @@ class VQATrainer:
             running_loss += total_loss.item()
 
             # accuracy prediction
-            running_correct += self.accuracy_fn(outputs, label)
+            running_correct += self.accuracy_fn(outputs, labels)
 
             # backpropagation
             if mode == 'train':
@@ -105,6 +114,9 @@ class VQATrainer:
                 optimizer.step()
 
             self.print_every(iterr, len(dataloader), print_every)
+            if e_break:
+                if iterr >= e_break:
+                    break
         
         epoch_end = time.clock()
         accuracy = running_correct / len(dataloader)
@@ -114,8 +126,8 @@ class VQATrainer:
 
         return self.model, running_loss, accuracy
 
-    def test_epoch(self, dataloader, print_every=1):
-        return self.train_epoch(dataloader, optimizer=None, mode='test')
+    def test_epoch(self, dataloader, print_every=1, e_break=None):
+        return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
 
     def get_accuracy_fns(self):
         '''
@@ -148,7 +160,10 @@ class VQATrainer:
             for i in range(len(label)):
                 pred_answer = pred[i]
                 label_answer = label[i]
-                correct_tensor = (pred_answer == label_answer)
+                if list(label_answer.size())[0] < 3:
+                    continue
+                #print(pred_answer, label_answer)
+                correct_tensor = (pred_answer.long() == label_answer.long())
                 corrects += max(3, correct_tensor.sum().item())
             return corrects / 3
         accuracy_fns['approve3t'] = approve_by_3tuple
