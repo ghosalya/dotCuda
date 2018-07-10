@@ -37,12 +37,13 @@ class VQATrainer:
 
         for e in range(epoch):
             # training phase
-            print('Training...')
+            print('Epoch {} of {}'.format(e, epoch))
+            print('  Training...')
             self.model, train_loss, train_acc = self.train_epoch(train_loader, optimizer=sgd_optimizer)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
             # validation phase
-            print('Validating...')
+            print('  Validating...')
             self.model, val_loss, val_acc = self.test_epoch(val_loader)
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
@@ -54,7 +55,7 @@ class VQATrainer:
         Train function fro one epoch, returning the model, loss & accuracy
         '''
         if mode == 'train' and optimizer is None:
-            optimizer = torch.optim.SGD(self.model.parameters(), 1e-2)
+            optimizer = torch.optim.Adam(self.model.parameters(), 1e-3)
 
         self.model.train(mode == 'train')
         self.model.zero_grad()
@@ -70,15 +71,29 @@ class VQATrainer:
             # wrapping data
             image = Variable(data['image'].to(self.device))
             question = Variable(data['question'].to(self.device))
-            label = data['label'].to(self.device)
+            labels = data['label'].to(self.device)
 
             # forward pass
             self.model.zero_grad()
             outputs = self.model(image, question)
 
             # handling loss
-            loss = self.criterion(outputs, label)
-            running_loss += loss.item()
+            total_loss = None
+            for i, label in enumerate(labels): # loop by batch
+                one_data_loss = None
+                for j in range(label.size().item()):
+                    if total_loss is None:
+                        one_data_loss = self.criterion(outputs, label[j])
+                    else:
+                        one_data_loss += self.criterion(outputs, label[j])
+                one_data_loss = one_data_loss / label.size()
+                # assigning to total loss
+                if total_loss is None:
+                    total_loss = one_data_loss
+                else:
+                    total_loss += one_data_loss
+
+            running_loss += total_loss.item()
 
             # accuracy prediction
             running_correct += self.accuracy_fn(outputs, label)
@@ -86,7 +101,7 @@ class VQATrainer:
             # backpropagation
             if mode == 'train':
                 optimizer.zero_grad()
-                loss.backward()
+                total_loss.backward()
                 optimizer.step()
 
             self.print_every(iterr, len(dataloader), print_every)
@@ -94,7 +109,7 @@ class VQATrainer:
         epoch_end = time.clock()
         accuracy = running_correct / len(dataloader)
 
-        print(' >> Epoch finished with loss {:.5f} and accuracy {:.3f} in {:.4f}s'\
+        print('   >> Epoch finished with loss {:.5f} and accuracy {:.3f} in {:.4f}s'\
               .format(running_loss, accuracy, epoch_end-epoch_start))
 
         return self.model, running_loss, accuracy
@@ -125,7 +140,18 @@ class VQATrainer:
             corrects = correct_tensor.sum().item()
             return corrects
         accuracy_fns['approve3'] = approved_by_three
-        
+
+        def approve_by_3tuple(outputs, label):
+            # approved_by_three but takes tuple of tensor as label
+            _, pred = outputs.topk(1)
+            corrects = 0
+            for i in range(len(label)):
+                pred_answer = pred[i]
+                label_answer = label[i]
+                correct_tensor = (pred_answer == label_answer)
+                corrects += max(3, correct_tensor.sum().item())
+            return corrects / 3
+        accuracy_fns['approve3t'] = approve_by_3tuple
         return accuracy_fns
             
 
