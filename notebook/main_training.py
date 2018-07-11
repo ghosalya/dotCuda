@@ -42,7 +42,7 @@ from trainer import VQATrainer
 
 trainer = VQATrainer(model, device)
 
-trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, e_break=10000)
+trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=16, e_break=10000, save_every=1, epoch=5)
 
 with open('stats.st', 'wb') as statfile:
     pickle.dump(statistics, statfile)

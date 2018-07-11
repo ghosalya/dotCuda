@@ -26,14 +26,15 @@ class ImageEmbedding(nn.Module):
         modules_front = list(resnet.children())[0:8]      
         self.resnet_front = nn.Sequential(*modules_front)
         
+        # freezing resnet_front
+        for param in self.resnet_front.parameters():
+            param.requires_grad = False
+        
         # get the avgpool and fc layers back
         
         modules_avgPool = list(resnet.children())[8:9]
-        modules_fc = list(resnet.children())[9:]
         self.resnet_back_pool = nn.AvgPool2d(kernel_size = 10, stride=1, padding=0) #1, 2048, 1, 1
         
-    
-    
     def forward(self, image):
         image = self.resnet_front(image)
         image = F.normalize(image, p=2, dim = 1)
@@ -53,7 +54,8 @@ class QnsEmbedding(nn.Module):
         self.question_ftrs = question_ftrs
         
     def forward (self, inputs, cache):
-        #inputs = self.tanh(inputs) # TODO: incorporate
+        inputs_data = self.tanh(inputs.data) # TODO: incorporate
+        inputs = PackedSequence(inputs_data, inputs.batch_sizes)
         output, (hn, cn) = self.lstm(inputs, cache)
         return hn, cn
         
@@ -92,5 +94,9 @@ class ConcatNet(nn.Module):
         added = torch.cat((image_embed,questions_embed), 1) #concat the img and qns layers
         output = self.all(added)
         return output
+    
+    def parameters(self):
+        return [param for param in self.qns_channel.parameters()] \
+               + [param for param in self.all.parameters()]
     
     
