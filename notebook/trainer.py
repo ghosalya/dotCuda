@@ -85,23 +85,7 @@ class VQATrainer:
             outputs = self.model(image, question)
 
             # handling loss
-            total_loss = None
-            for i, label in enumerate(labels): # loop by batch
-                one_data_loss = None
-                if list(label.size())[0] < 3:
-                    continue
-                for j in range(list(label.size())[0]):
-                    if one_data_loss is None:
-                        one_data_loss = self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
-                    else:
-                        one_data_loss += self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
-                one_data_loss = one_data_loss / list(label.size())[0]
-                # assigning to total loss
-                if total_loss is None:
-                    total_loss = one_data_loss
-                else:
-                    total_loss += one_data_loss
-
+            total_loss = self.get_losses(outputs, labels)
             running_loss += total_loss.item()
 
             # accuracy prediction
@@ -128,6 +112,26 @@ class VQATrainer:
 
     def test_epoch(self, dataloader, print_every=1, e_break=None):
         return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
+    
+    def get_losses(self, outputs, labels):
+        total_loss = None
+        for i, label in enumerate(labels): # loop by batch
+            one_data_loss = None
+            if list(label.size())[0] < 3:
+                continue
+            for j in range(list(label.size())[0]):
+                if one_data_loss is None:
+                    one_data_loss = self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
+                else:
+                    one_data_loss += self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
+            one_data_loss = one_data_loss / list(label.size())[0]
+            # assigning to total loss
+            if total_loss is None:
+                total_loss = one_data_loss
+            else:
+                total_loss += one_data_loss
+        return total_loss
+        
 
     def get_accuracy_fns(self):
         '''
@@ -164,7 +168,8 @@ class VQATrainer:
                     continue
                 #print(pred_answer, label_answer)
                 correct_tensor = (pred_answer.long() == label_answer.long())
-                corrects += max(3, correct_tensor.sum().item())
+                print('correct:', correct_tensor)
+                corrects += min(3, correct_tensor.sum().item())
             return corrects / (3 * len(label))
         accuracy_fns['approve3t'] = approve_by_3tuple
         return accuracy_fns
