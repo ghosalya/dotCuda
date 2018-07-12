@@ -168,7 +168,6 @@ class VQATrainer:
                     continue
                 #print(pred_answer, label_answer)
                 correct_tensor = (pred_answer.long() == label_answer.long())
-                print('correct:', correct_tensor)
                 corrects += min(3, correct_tensor.sum().item())
             return corrects / (3 * len(label))
         accuracy_fns['approve3t'] = approve_by_3tuple

@@ -19,7 +19,7 @@ from torch.nn.utils.rnn import PackedSequence
 # another fc layer nn.linear(image_ftrs + question_ftrs, 1024) in ConcatNet
 
 class ImageEmbedding(nn.Module):
-    def __init__(self, mode = 'train'): #1024 or 1000?
+    def __init__(self, mode = 'train', freeze=True): #1024 or 1000?
         super(ImageEmbedding, self).__init__()
         #get the first 0-7 layers ; delete the avgpool and fc layers
         resnet = models.resnet152(pretrained=True)
@@ -27,8 +27,9 @@ class ImageEmbedding(nn.Module):
         self.resnet_front = nn.Sequential(*modules_front)
         
         # freezing resnet_front
-        for param in self.resnet_front.parameters():
-            param.requires_grad = False
+        if freeze:
+            for param in self.resnet_front.parameters():
+                param.requires_grad = False
         
         # get the avgpool and fc layers back
         
@@ -70,10 +71,11 @@ class QnsEmbedding(nn.Module):
 '''    
 
 class ConcatNet(nn.Module):
-    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, lstm_layers=1, mode = 'train'):
+    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, lstm_layers=1, mode = 'train', freeze_resnet=True):
         super(ConcatNet, self).__init__()
         self.mode = mode
-        self.img_channel = ImageEmbedding(mode = mode)
+        self.freeze_resnet = freeze_resnet
+        self.img_channel = ImageEmbedding(mode = mode, freeze=freeze_resnet)
         self.qns_channel = QnsEmbedding(word_emb_size, question_ftrs=emb_size, num_layers=lstm_layers, batch_first = True)
         
         self.word_emb_size = word_emb_size
@@ -96,7 +98,10 @@ class ConcatNet(nn.Module):
         return output
     
     def parameters(self):
-        return [param for param in self.qns_channel.parameters()] \
-               + [param for param in self.all.parameters()]
+        if self.freeze_resnet:
+            return [param for param in self.qns_channel.parameters()] \
+                   + [param for param in self.all.parameters()]
+        else:
+            return super(ConcatNet, self).parameters()
     
     
