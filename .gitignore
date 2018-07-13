@@ -1,2 +1,4 @@
 .vscode
 notebook/model_epoch*
+*/__pycache__
+
