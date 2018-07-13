@@ -24,8 +24,8 @@ with open(vocab_path, 'rb') as f:
     
 from dataset import *
 
-train_dataset = COCODataset(vocab=vocab, answers=answers)
-val_dataset = COCODataset(vocab=valvocab, answers=valanswers)
+train_dataset = COCODataset(vocab=vocab, answers=answers).subset(80000)
+val_dataset = COCODataset(vocab=valvocab, answers=valanswers).subset(10000)
 
 
 # import network 
@@ -41,8 +41,7 @@ from trainer import VQATrainer
 
 trainer = VQATrainer(model, device)
 
-trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=256, #e_break=10000, 
-                                          save_every=1, epoch=5, val_size=5000)
+trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=256, epoch=5)
 
 with open('stats.st', 'wb') as statfile:
     pickle.dump(statistics, statfile)

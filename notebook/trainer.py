@@ -20,8 +20,8 @@ class VQATrainer:
         self.accuracy_fn = accuracy_fn_list[accuracy_fn]
         self.statistics = {}
 
-    def train(self, train_dataset, val_dataset, epoch=5, batch_size=8, learnrate=1e-2, 
-              collate_fn=None, e_break=None, save_every=1, val_size=1000):
+    def train(self, train_dataset, val_dataset, epoch=5, batch_size=128, learnrate=1e-3, 
+              collate_fn=None, save_every=1:
         '''
         Train over many epoch, outputing test result
         in between
@@ -29,11 +29,11 @@ class VQATrainer:
         adam_optimizer = torch.optim.Adam(self.model.parameters(), learnrate)
 
         if collate_fn:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=4, collate_fn=collate_fn)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, collate_fn=collate_fn)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=collate_fn)
         else:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
         self.statistics = {'train-losses':[],
                            'val-losses': [],
@@ -48,14 +48,14 @@ class VQATrainer:
             # training phase
             print('Epoch {} of {}'.format(e, epoch))
             print('  Training...')
-            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=adam_optimizer, e_break=e_break)
+            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=adam_optimizer)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
             self.statistics['train-losslist'].append(train_losslist)
             self.statistics['train-acclist'].append(train_acclist)
             # validation phase
             print('  Validating...')
-            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader, e_break=int(val_size/batch_size))
+            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader)
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
             self.statistics['val-losslist'].append(val_losslist)
@@ -66,8 +66,7 @@ class VQATrainer:
 
         return self.model, self.statistics
 
-    def train_epoch(self, dataloader, optimizer=None, mode='train', 
-                    print_every=1, e_break=None, plot_every=5):
+    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1, plot_every=5):
         '''
         Train function fro one epoch, returning the model, loss & accuracy
         '''
@@ -112,8 +111,6 @@ class VQATrainer:
 
             self.print_every(iterr, len(dataloader), print_every, 
                              running_loss, running_correct)
-            if e_break:
-                if iterr >= e_break: break
 
             if iterr % plot_every == 0:
                 loss_list.append(running_loss)
@@ -127,27 +124,8 @@ class VQATrainer:
 
         return self.model, running_loss, accuracy, loss_list, correct_list
 
-    def test_epoch(self, dataloader, print_every=1, e_break=None):
-        return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
-    
-    def get_losses_legacy(self, outputs, labels):
-        total_loss = None
-        for i, label in enumerate(labels): # loop by batch
-            one_data_loss = None
-            if list(label.size())[0] < 3:
-                continue
-            for j in range(list(label.size())[0]):
-                if one_data_loss is None:
-                    one_data_loss = self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
-                else:
-                    one_data_loss += self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
-            one_data_loss = one_data_loss / list(label.size())[0]
-            # assigning to total loss
-            if total_loss is None:
-                total_loss = one_data_loss
-            else:
-                total_loss += one_data_loss
-        return total_loss
+    def test_epoch(self, dataloader, print_every=1):
+        return self.train_epoch(dataloader, optimizer=None, mode='test')
     
     def get_losses(self, outputs, labels):
         '''
@@ -160,7 +138,6 @@ class VQATrainer:
             else:
                 total_loss += self.criterion(outputs, labels[:,i].long())
         return total_loss / (10*len(labels))
-        
 
     def get_accuracy_fns(self):
         '''
@@ -261,6 +238,26 @@ class VQATrainer:
             plt.plot(self.statistics['train-acclist'][i], color='blue')
             plt.plot(self.statistics['val-acclist'][i], color='cyan')
             plt.title("Epoch {} - Accuracy".format(i))
+
+    #### LEGACY METHODS ####
+    def get_losses_legacy(self, outputs, labels):
+        total_loss = None
+        for i, label in enumerate(labels): # loop by batch
+            one_data_loss = None
+            if list(label.size())[0] < 3:
+                continue
+            for j in range(list(label.size())[0]):
+                if one_data_loss is None:
+                    one_data_loss = self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
+                else:
+                    one_data_loss += self.criterion(outputs[i:i+1].float(), label[j:j+1].long())
+            one_data_loss = one_data_loss / list(label.size())[0]
+            # assigning to total loss
+            if total_loss is None:
+                total_loss = one_data_loss
+            else:
+                total_loss += one_data_loss
+        return total_loss
 
 
 def main():

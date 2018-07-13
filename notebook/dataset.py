@@ -1,4 +1,4 @@
-import os
+import os, copy, random
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
@@ -71,6 +71,21 @@ class COCODataset(Dataset):
         answer_tensor = torch.Tensor(ans_index_list)
         
         return question_tensor, image, answer_tensor     
+
+    def subset(self, fraction=0.5, count=None):
+        '''
+        Assert error if both fraction and count is given
+        give subset of certain fraction/count
+        '''
+        assert not fraction and count
+
+        if not count:
+            count = int(len(self.quesIds) * fraction)
+
+        subset = copy.deepcopy(self)
+        random.shuffle(subset.quesIds)
+        subset.quesIds = subset.quesIds[:count]
+
         
     def __len__(self):
         return len(self.vqa.dataset['annotations'])
