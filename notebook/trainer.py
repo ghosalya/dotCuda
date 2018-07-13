@@ -37,27 +37,36 @@ class VQATrainer:
         self.statistics = {'train-losses':[],
                            'val-losses': [],
                            'train-accuracy': [],
-                           'val-accuracy': []}
+                           'val-accuracy': [],
+                           'train-losslist': [],
+                           'train-acclist': [],
+                           'val-losslist': [],
+                           'val-acclist': []}
 
         for e in range(epoch):
             # training phase
             print('Epoch {} of {}'.format(e, epoch))
             print('  Training...')
-            self.model, train_loss, train_acc = self.train_epoch(train_loader, optimizer=sgd_optimizer, e_break=e_break)
+            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=sgd_optimizer, e_break=e_break)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
+            self.statistics['train-losslist'].append(train_losslist)
+            self.statistics['train-acclist'].append(train_acclist)
             # validation phase
             print('  Validating...')
-            self.model, val_loss, val_acc = self.test_epoch(val_loader, e_break=e_break)
+            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader, e_break=e_break)
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
-            
+            self.statistics['val-losslist'].append(val_losslist)
+            self.statistics['val-acclist'].append(val_acclist)
+
             if e % save_every == 0:
                 torch.save(self.model.state_dict(), './model_epoch{}.pt'.format(e))
 
         return self.model, self.statistics
 
-    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1, e_break=None):
+    def train_epoch(self, dataloader, optimizer=None, mode='train', 
+                    print_every=1, e_break=None, plot_every=5):
         '''
         Train function fro one epoch, returning the model, loss & accuracy
         '''
@@ -69,6 +78,9 @@ class VQATrainer:
 
         running_loss = 0
         running_correct = 0
+
+        loss_list = []
+        correct_list = []
 
         epoch_start = time.clock()
         iterr = 0
@@ -89,7 +101,7 @@ class VQATrainer:
             running_loss += total_loss.item()
 
             # accuracy prediction
-            running_correct += self.accuracy_fn(outputs, labels)
+            running_correct += self.accuracy_fn(outputs, labels) / len(dataloader)
 
             # backpropagation
             if mode == 'train':
@@ -97,18 +109,24 @@ class VQATrainer:
                 total_loss.backward()
                 optimizer.step()
 
-            self.print_every(iterr, len(dataloader), print_every)
+            self.print_every(iterr, len(dataloader), print_every, 
+                             running_loss, running_correct)
             if e_break:
-                if iterr >= e_break:
-                    break
+                if iterr >= e_break: break
+
+            if iterr % plot_every == 0:
+                loss_list.append(running_loss)
+                correct_list.append(running_correct)
+
+            
         
         epoch_end = time.clock()
-        accuracy = running_correct / len(dataloader)
+        accuracy = running_correct 
 
         print('   >> Epoch finished with loss {:.5f} and accuracy {:.3f} in {:.4f}s'\
               .format(running_loss, accuracy, epoch_end-epoch_start))
 
-        return self.model, running_loss, accuracy
+        return self.model, running_loss, accuracy, loss_list, correct_list
 
     def test_epoch(self, dataloader, print_every=1, e_break=None):
         return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
@@ -130,7 +148,7 @@ class VQATrainer:
                 total_loss = one_data_loss
             else:
                 total_loss += one_data_loss
-        return total_loss
+        return total_loss / len(labels)
         
 
     def get_accuracy_fns(self):
@@ -167,17 +185,21 @@ class VQATrainer:
                 if list(label_answer.size())[0] < 3:
                     continue
                 #print(pred_answer, label_answer)
-                correct_tensor = (pred_answer.long() == label_answer.long())
-                corrects += min(3, correct_tensor.sum().item())
-            return corrects / (3 * len(label))
+                label_size = list(label_answer.size())[0]
+                for j in range(label_size):
+                    a_idx = [k for k in range(label_size) if k != j]
+                    masked_label = label_answer.index_select(a_idx)
+                    correct_tensor = (pred_answer.long() == masked_label.long())
+                    corrects += min(3, correct_tensor.sum().item()) / (3 * label_size * len(label))
+            return corrects
         accuracy_fns['approve3t'] = approve_by_3tuple
         return accuracy_fns
             
 
     # utility
-    def print_every(self, iterr, total, every):
+    def print_every(self, iterr, total, every, loss, acc):
         if iterr % every == 0:
-            print('    ....iteration {}/{}'.format(iterr, total), end='\r')
+            print('    ....iteration {}/{}   [loss {} || acc {}]'.format(iterr, total, loss, acc), end='\r')
 
     def set_accuracy_fn(self, fn_code):
         if fn_code in self.get_accuracy_fns():
@@ -192,14 +214,27 @@ class VQATrainer:
             raise ValueError("No training session has been run on this trainer")
 
         plt.figure()
-        plt.subplot(121)
+        plt.subplot(1, 2, 1)
         plt.plot(self.statistics['train-losses'], color='purple')
         plt.plot(self.statistics['val-losses'], color='red')
         plt.title("Losses")
 
-        plt.subplot(122)
+        plt.subplot(1, 2, 2)
         plt.plot(self.statistics['train-accuracy'], color='blue')
         plt.plot(self.statistics['val-accuracy'], color='cyan')
+
+        # plot in-epoch statistics
+        plt.figure()
+        nrow = len(self.statistics['train-losslist'])
+        for i in range(nrow):
+            # one row per epoch
+            plt.subplot(nrow, 2, 1 + 2*i )
+            plt.plot(self.statistics['train-losslist'][i], color='purple')
+            plt.plot(self.statistics['val-losslist'][i], color='red')
+            plt.subplot(nrow, 2, 2 + 2*i )
+            plt.plot(self.statistics['train-acclist'][i], color='blue')
+            plt.plot(self.statistics['val-acclist'][i], color='cyan')
+
 
 def main():
     print("DO NOT RUN THIS SCRIPT BY ITSELF\nIMPORT IT INSTEAD")

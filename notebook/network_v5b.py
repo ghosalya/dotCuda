@@ -81,7 +81,7 @@ class ConcatNet(nn.Module):
         self.word_emb_size = word_emb_size
         #vocab_size: size of dictionary embeddings, word_emb_size: size of each embedding vector
         self.word_embeddings = nn.Embedding(vocab_size, word_emb_size)
-        self.all = nn.Sequential(nn.Dropout(0.5), nn.Linear(2048 + emb_size, 1024), 
+        self.resolve_fc = nn.Sequential(nn.Dropout(0.5), nn.Linear(2048 + emb_size, 1024), 
                                 nn.ReLU(), 
                                 nn.Linear(1024, 3000), 
                                 nn.Softmax(dim = 1))
@@ -94,13 +94,14 @@ class ConcatNet(nn.Module):
         questions_embed, _ = self.qns_channel(embeds, cache)
         questions_embed = questions_embed[-1]
         added = torch.cat((image_embed,questions_embed), 1) #concat the img and qns layers
-        output = self.all(added)
+        output = self.resolve_fc(added)
         return output
     
     def parameters(self):
         if self.freeze_resnet:
             return [param for param in self.qns_channel.parameters()] \
-                   + [param for param in self.all.parameters()]
+                   + [param for param in self.resolve_fc.parameters()] \
+                   + [param for param in self.word_embeddings.parameters()]
         else:
             return super(ConcatNet, self).parameters()
     
