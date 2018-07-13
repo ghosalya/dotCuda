@@ -1,0 +1,45 @@
+<MenuScreen>:
+    BoxLayout:
+        orientation: "vertical"
+        Label: 
+            text: 'What do you want to do?'
+            font_size: 40
+           
+        Button:
+            text: 'Select Image from Folder'
+            on_press:
+                root.manager.transition.direction = 'left'
+                root.manager.current = 'selectimg'
+
+<SelectImageScreen>:
+    id: selectimg
+    file_chooser: file_chooser
+    GridLayout:
+        rows: 3
+        FileChooserListView:
+            id: file_chooser
+            on_selection: selectimg.selected(file_chooser.selection)
+        Image:
+            id: image1
+            source: ""
+        Button:
+            text: 'Compute'
+            on_press: root.manager.current = 'enterqns'
+        
+<EnterQuestionScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        Image:
+            id: image2
+            source: ""
+        TextInput:
+            id: input
+            text: 'hello'
+            font_size: 30
+        Button: 
+            text: 'Enter Question'
+        Label:
+            text: 'Predicted Answer'
+        Button:
+            text: 'Back to Menu'
+            on_press: root.manager.current = 'menu'
