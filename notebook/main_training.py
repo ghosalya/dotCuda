@@ -24,8 +24,9 @@ with open(vocab_path, 'rb') as f:
     
 from dataset import *
 
-train_dataset = COCODataset(vocab=vocab, answers=answers).subset(80000)
-val_dataset = COCODataset(vocab=valvocab, answers=valanswers).subset(10000)
+train_dataset = COCODataset(vocab=vocab, answers=answers).subset(count=80000)
+val_dataset = COCODataset(vocab=valvocab, answers=valanswers).subset(count=10000)
+print('\nTraining on', len(train_dataset), 'train data and', len(val_dataset), 'validation data.\n')
 
 
 # import network 
@@ -34,14 +35,14 @@ import torch
 device = torch.device('cuda')
 
 vocab_size = len(vocab)
-model = ConcatNet(vocab_size).to(device)
+model = ConcatNet(vocab_size, with_attention=False).to(device)
 
 # import trainer
 from trainer import VQATrainer
 
 trainer = VQATrainer(model, device)
 
-trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=256, epoch=5)
+trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=256, epoch=1)
 
 with open('stats.st', 'wb') as statfile:
     pickle.dump(statistics, statfile)

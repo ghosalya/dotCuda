@@ -28,6 +28,8 @@ class COCODataset(Dataset):
                                               std=[0.229, 0.224, 0.225]),
                          ])
         
+    def __len__(self):
+        return len(self.quesIds)
         
     def __getitem__(self, index):
         
@@ -74,21 +76,19 @@ class COCODataset(Dataset):
 
     def subset(self, fraction=0.5, count=None):
         '''
-        Assert error if both fraction and count is given
         give subset of certain fraction/count
+        prioritizes count
         '''
-        assert not fraction and count
-
         if not count:
             count = int(len(self.quesIds) * fraction)
-
+        print('Getting subset of length', count, 'out of', len(self))
         subset = copy.deepcopy(self)
         random.shuffle(subset.quesIds)
         subset.quesIds = subset.quesIds[:count]
-
-        
-    def __len__(self):
-        return len(self.vqa.dataset['annotations'])
+        return subset
+    
+#     def __len__(self):
+#         return len(self.vqa.dataset['annotations'])
     
 
 def collate(batch):

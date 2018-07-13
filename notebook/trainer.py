@@ -21,7 +21,7 @@ class VQATrainer:
         self.statistics = {}
 
     def train(self, train_dataset, val_dataset, epoch=5, batch_size=128, learnrate=1e-3, 
-              collate_fn=None, save_every=1:
+              collate_fn=None, save_every=1):
         '''
         Train over many epoch, outputing test result
         in between
@@ -137,7 +137,7 @@ class VQATrainer:
                 total_loss = self.criterion(outputs, labels[:,i].long())
             else:
                 total_loss += self.criterion(outputs, labels[:,i].long())
-        return total_loss / (10*len(labels))
+        return total_loss / 10
 
     def get_accuracy_fns(self):
         '''
@@ -200,7 +200,7 @@ class VQATrainer:
     # utility
     def print_every(self, iterr, total, every, loss, acc):
         if iterr % every == 0:
-            print('    ....iteration {}/{}   [loss {} || acc {}]'.format(iterr, total, loss, acc), end='\r')
+            print('    ....iteration {}/{}   [loss {:.5f} || acc {:.3f}]'.format(iterr, total, loss, acc), end='\r')
 
     def set_accuracy_fn(self, fn_code):
         if fn_code in self.get_accuracy_fns():

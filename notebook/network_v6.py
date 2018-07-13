@@ -111,7 +111,7 @@ class Attention(nn.Module):
 
 class ConcatNet(nn.Module):
     def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, with_attention=True,
-                 glimpse=2, lstm_layers=1, output_size=3000, mode = 'train', freeze_resnet=True):
+                 glimpse=2, lstm_layers=1, output_size=3001, mode = 'train', freeze_resnet=True):
         super(ConcatNet, self).__init__()
         self.mode = mode
         self.freeze_resnet = freeze_resnet
@@ -137,7 +137,6 @@ class ConcatNet(nn.Module):
         
     def forward(self, image, questions):
         image_embed = self.img_channel(image) # returns b x 10 x 10 x 2048
-        b, c, _, s = image_embed.size()
         emb_qns = self.word_embeddings(questions.data)
         embeds = PackedSequence(emb_qns, questions.batch_sizes)
         
@@ -146,6 +145,7 @@ class ConcatNet(nn.Module):
         questions_embed = questions_embed[-1]
         
         if self.with_attention:
+            b, c, _, s = image_embed.size()
             img_attn = self.atn_channel(image_embed, questions_embed)
             # combining attention
             image_embed = image_embed.view(b, 1, c, -1).expand(b, self.glimpse, c, 100)
