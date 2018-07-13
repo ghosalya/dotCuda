@@ -74,7 +74,7 @@ class COCODataset(Dataset):
         
         return question_tensor, image, answer_tensor     
 
-    def subset(self, fraction=0.5, count=None):
+    def subset(self, fraction=0.5, count=None, shuffle=True):
         '''
         give subset of certain fraction/count
         prioritizes count
@@ -83,7 +83,7 @@ class COCODataset(Dataset):
             count = int(len(self.quesIds) * fraction)
         print('Getting subset of length', count, 'out of', len(self))
         subset = copy.deepcopy(self)
-        random.shuffle(subset.quesIds)
+        if shuffle: random.shuffle(subset.quesIds)
         subset.quesIds = subset.quesIds[:count]
         return subset
     

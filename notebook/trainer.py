@@ -21,7 +21,7 @@ class VQATrainer:
         self.statistics = {}
 
     def train(self, train_dataset, val_dataset, epoch=5, batch_size=128, learnrate=1e-3, 
-              collate_fn=None, save_every=1):
+              collate_fn=None, save_every=1, e_break=None, v_break=None, shuffle=True):
         '''
         Train over many epoch, outputing test result
         in between
@@ -29,11 +29,11 @@ class VQATrainer:
         adam_optimizer = torch.optim.Adam(self.model.parameters(), learnrate)
 
         if collate_fn:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, collate_fn=collate_fn)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=collate_fn)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16, collate_fn=collate_fn)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16, collate_fn=collate_fn)
         else:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16)
 
         self.statistics = {'train-losses':[],
                            'val-losses': [],
@@ -48,14 +48,14 @@ class VQATrainer:
             # training phase
             print('Epoch {} of {}'.format(e, epoch))
             print('  Training...')
-            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=adam_optimizer)
+            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=adam_optimizer, e_break=e_break)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
             self.statistics['train-losslist'].append(train_losslist)
             self.statistics['train-acclist'].append(train_acclist)
             # validation phase
             print('  Validating...')
-            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader)
+            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader, e_break=v_break)
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
             self.statistics['val-losslist'].append(val_losslist)
@@ -66,7 +66,7 @@ class VQATrainer:
 
         return self.model, self.statistics
 
-    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1, plot_every=5):
+    def train_epoch(self, dataloader, optimizer=None, mode='train', print_every=1, plot_every=5, e_break=None):
         '''
         Train function fro one epoch, returning the model, loss & accuracy
         '''
@@ -115,6 +115,10 @@ class VQATrainer:
             if iterr % plot_every == 0:
                 loss_list.append(running_loss)
                 correct_list.append(running_correct)
+                
+            if e_break:
+                if iterr >= e_break:
+                    break
         
         epoch_end = time.clock()
         accuracy = running_correct 
@@ -124,8 +128,8 @@ class VQATrainer:
 
         return self.model, running_loss, accuracy, loss_list, correct_list
 
-    def test_epoch(self, dataloader, print_every=1):
-        return self.train_epoch(dataloader, optimizer=None, mode='test')
+    def test_epoch(self, dataloader, print_every=1, e_break=None):
+        return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
     
     def get_losses(self, outputs, labels):
         '''
