@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 class VQATrainer:
-    def __init__(self, model, device, accuracy_fn='approve3t'):
+    def __init__(self, model, device, accuracy_fn='approve3ts'):
         self.model = model
         self.criterion = torch.nn.CrossEntropyLoss()
         self.device = device
@@ -20,19 +20,20 @@ class VQATrainer:
         self.accuracy_fn = accuracy_fn_list[accuracy_fn]
         self.statistics = {}
 
-    def train(self, train_dataset, val_dataset, epoch=5, batch_size=8, learnrate=1e-2, collate_fn=None, e_break=None, save_every=1):
+    def train(self, train_dataset, val_dataset, epoch=5, batch_size=8, learnrate=1e-2, 
+              collate_fn=None, e_break=None, save_every=1, val_size=1000):
         '''
         Train over many epoch, outputing test result
         in between
         '''
-        sgd_optimizer = torch.optim.SGD(self.model.parameters(), learnrate)
+        adam_optimizer = torch.optim.Adam(self.model.parameters(), learnrate)
 
         if collate_fn:
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=4, collate_fn=collate_fn)
         else:
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
         self.statistics = {'train-losses':[],
                            'val-losses': [],
@@ -47,14 +48,14 @@ class VQATrainer:
             # training phase
             print('Epoch {} of {}'.format(e, epoch))
             print('  Training...')
-            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=sgd_optimizer, e_break=e_break)
+            self.model, train_loss, train_acc, train_losslist, train_acclist = self.train_epoch(train_loader, optimizer=adam_optimizer, e_break=e_break)
             self.statistics['train-losses'].append(train_loss)
             self.statistics['train-accuracy'].append(train_acc)
             self.statistics['train-losslist'].append(train_losslist)
             self.statistics['train-acclist'].append(train_acclist)
             # validation phase
             print('  Validating...')
-            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader, e_break=e_break)
+            self.model, val_loss, val_acc, val_losslist, val_acclist = self.test_epoch(val_loader, e_break=int(val_size/batch_size))
             self.statistics['val-losses'].append(val_loss)
             self.statistics['val-accuracy'].append(val_acc)
             self.statistics['val-losslist'].append(val_losslist)
@@ -90,15 +91,15 @@ class VQATrainer:
             # wrapping data
             question = data[0].long().cuda()
             image = data[1].to(self.device)
-            labels = [dat.to(self.device) for dat in data[2]]
+            labels = data[2].to(self.device)
 
             # forward pass
             self.model.zero_grad()
             outputs = self.model(image, question)
 
             # handling loss
-            total_loss = self.get_losses(outputs, labels)
-            running_loss += total_loss.item()
+            batch_loss = self.get_losses(outputs, labels)
+            running_loss += batch_loss.item()
 
             # accuracy prediction
             running_correct += self.accuracy_fn(outputs, labels) / len(dataloader)
@@ -106,7 +107,7 @@ class VQATrainer:
             # backpropagation
             if mode == 'train':
                 optimizer.zero_grad()
-                total_loss.backward()
+                batch_loss.backward()
                 optimizer.step()
 
             self.print_every(iterr, len(dataloader), print_every, 
@@ -117,8 +118,6 @@ class VQATrainer:
             if iterr % plot_every == 0:
                 loss_list.append(running_loss)
                 correct_list.append(running_correct)
-
-            
         
         epoch_end = time.clock()
         accuracy = running_correct 
@@ -131,7 +130,7 @@ class VQATrainer:
     def test_epoch(self, dataloader, print_every=1, e_break=None):
         return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
     
-    def get_losses(self, outputs, labels):
+    def get_losses_legacy(self, outputs, labels):
         total_loss = None
         for i, label in enumerate(labels): # loop by batch
             one_data_loss = None
@@ -148,7 +147,19 @@ class VQATrainer:
                 total_loss = one_data_loss
             else:
                 total_loss += one_data_loss
-        return total_loss / len(labels)
+        return total_loss
+    
+    def get_losses(self, outputs, labels):
+        '''
+        This function expects labels to be a tensor of batchX10
+        '''
+        total_loss = None
+        for i in range(10):
+            if total_loss is None:
+                total_loss = self.criterion(outputs, labels[:,i].long())
+            else:
+                total_loss += self.criterion(outputs, labels[:,i].long())
+        return total_loss / (10*len(labels))
         
 
     def get_accuracy_fns(self):
@@ -188,11 +199,24 @@ class VQATrainer:
                 label_size = list(label_answer.size())[0]
                 for j in range(label_size):
                     a_idx = [k for k in range(label_size) if k != j]
-                    masked_label = label_answer.index_select(a_idx)
+                    masked_label = label_answer[a_idx]
                     correct_tensor = (pred_answer.long() == masked_label.long())
                     corrects += min(3, correct_tensor.sum().item()) / (3 * label_size * len(label))
             return corrects
         accuracy_fns['approve3t'] = approve_by_3tuple
+        
+        
+        def approve_by_3tensor(outputs, label):
+            # approved_by_three but takes tuple of tensor as label
+            _, pred = outputs.topk(1)
+            corrects = 0
+            for i in range(10):
+                sub_idx = [k for k in range(10) if k != i]
+                label_subset = label[:, sub_idx]
+                correct_answers  = (pred.long() == label_subset.long())
+                corrects += correct_answers.sum(dim=1).clamp(max=3).sum() / (3 * label.size(0) * 10)
+            return corrects
+        accuracy_fns['approve3ts'] = approve_by_3tensor
         return accuracy_fns
             
 
@@ -222,18 +246,21 @@ class VQATrainer:
         plt.subplot(1, 2, 2)
         plt.plot(self.statistics['train-accuracy'], color='blue')
         plt.plot(self.statistics['val-accuracy'], color='cyan')
+        plt.title("Accuracy")
 
         # plot in-epoch statistics
-        plt.figure()
         nrow = len(self.statistics['train-losslist'])
         for i in range(nrow):
+            plt.figure()
             # one row per epoch
-            plt.subplot(nrow, 2, 1 + 2*i )
+            plt.subplot(1, 2, 1)
             plt.plot(self.statistics['train-losslist'][i], color='purple')
             plt.plot(self.statistics['val-losslist'][i], color='red')
-            plt.subplot(nrow, 2, 2 + 2*i )
+            plt.title("Epoch {} - Losses".format(i))
+            plt.subplot(1, 2, 2)
             plt.plot(self.statistics['train-acclist'][i], color='blue')
             plt.plot(self.statistics['val-acclist'][i], color='cyan')
+            plt.title("Epoch {} - Accuracy".format(i))
 
 
 def main():

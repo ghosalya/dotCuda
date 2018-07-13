@@ -32,15 +32,16 @@ class ImageEmbedding(nn.Module):
                 param.requires_grad = False
         
         # get the avgpool and fc layers back
-        
-        modules_avgPool = list(resnet.children())[8:9]
-        self.resnet_back_pool = nn.AvgPool2d(kernel_size = 10, stride=1, padding=0) #1, 2048, 1, 1
+        # self.resnet_back_pool = nn.AvgPool2d(kernel_size = 10, stride=1, padding=0) #1, 2048, 1, 1
         
     def forward(self, image):
+        '''
+        Outputs a 10x10x2048
+        '''
         image = self.resnet_front(image)
         image = F.normalize(image, p=2, dim = 1)
-        image = self.resnet_back_pool(image)
-        image = image.view(-1, 2048)
+        # image = self.resnet_back_pool(image)
+        # image = image.view(-1, 2048)
         return image       
 
 '''
@@ -70,58 +71,77 @@ class QnsEmbedding(nn.Module):
 '''
 # Attention Models 
 '''         
-class Attention (nn.Module):
-    def __init__ (self, output_size = , k = , dropout = True, mode = 'train', freeze_resnet = True):
-        super.(Attention, self).__init__()
+class Attention(nn.Module):
+    def __init__ (self, image_ftrs=2048, question_ftrs=1024, k=512, glimpse=2, dropout=True, mode='train'):
+        super(Attention, self).__init__()
         self.mode = mode
-        self.freeze_resnet = freeze_resnet
-        self.img_channel = ImageEmbedding(mode = mode, freeze=freeze_resnet)   
-        self.qns_channel = QnsEmbedding(word_emb_size, question_ftrs=emb_size, num_layers=lstm_layers, batch_first = True)
-        self.conv_1 = nn.Conv2d(3072, 512, 1) 
-        self.relu = nn.ReLu()
-        self.conv_2 = nn.Conv2d(512, 2, 1)
+        self.image_ftrs = image_ftrs
+        self.k_size = k
+        self.question_ftrs = question_ftrs
+        self.glimpse = glimpse
+        self.conv_1 = nn.Conv2d(image_ftrs, k, 1) 
+        self.question_mid_fc = nn.Linear(question_ftrs, k)
+        self.relu = nn.ReLU()
+        self.conv_2 = nn.Conv2d(k, glimpse, 1)
         self.softmax = nn.Softmax(dim = 1)
         
-    def forward (self, output)
-        image_embed = self.img_channel(image)
-        questions_embed, _ = self.qns_channel(embeds, cache)
-        questions_embed = questions_embed[-1]
-        concat = torch.cat((image_embed,questions_embed), 1) #concat the img and qns layers
-        output = self.conv_1(concat)
-        output = self.relu(output)
+    def forward (self, image_embed, questions_embed):
+        '''
+        image_embed = bx10x10x2048
+        questions_embed = bx1x1024
+        '''
+        b, c, s1, s2 = image_embed.size()
+        img_conv = self.conv_1(image_embed)
+        
+        # tiling
+        qns_ft = self.question_mid_fc(questions_embed.view(b, self.question_ftrs))
+        tiled_qns_ft = qns_ft.view(b, self.k_size, 1, 1).expand_as(img_conv)
+        
+        output = self.relu(img_conv + tiled_qns_ft)
         output = self.conv_2(output)
-        output = self.softmax(output)
-        multiply = output * 
+        output = self.softmax(output.view(b, -1)).view(b, self.glimpse, s1, s2)
         return output
+    
         
 '''
 # concat two models - LSTM and RESNET152   
 '''    
 
 class ConcatNet(nn.Module):
-    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, lstm_layers=1, mode = 'train', freeze_resnet=True):
+    def __init__(self, vocab_size, word_emb_size = 300, emb_size = 1024, glimpse=2, lstm_layers=1, mode = 'train', freeze_resnet=True):
         super(ConcatNet, self).__init__()
         self.mode = mode
+        self.glimpse = glimpse
         self.freeze_resnet = freeze_resnet
         self.img_channel = ImageEmbedding(mode = mode, freeze=freeze_resnet)
         self.qns_channel = QnsEmbedding(word_emb_size, question_ftrs=emb_size, num_layers=lstm_layers, batch_first = True)
+        self.atn_channel = Attention(question_ftrs=emb_size, glimpse=glimpse)
         
         self.word_emb_size = word_emb_size
         #vocab_size: size of dictionary embeddings, word_emb_size: size of each embedding vector
         self.word_embeddings = nn.Embedding(vocab_size, word_emb_size)
-        self.resolve_fc = nn.Sequential(nn.Dropout(0.5), nn.Linear(2048 + emb_size, 1024), 
+        self.resolve_fc = nn.Sequential(nn.Dropout(0.5), nn.Linear(2048 * self.glimpse + emb_size, 1024), 
                                 nn.ReLU(), 
                                 nn.Linear(1024, 3000), 
                                 nn.Softmax(dim = 1))
         
     def forward(self, image, questions):
-        image_embed = self.img_channel(image) #returns tensor
+        image_embed = self.img_channel(image) # returns b x 10 x 10 x 2048
+        b, c, _, s = image_embed.size()
         emb_qns = self.word_embeddings(questions.data)
         embeds = PackedSequence(emb_qns, questions.batch_sizes)
+        
         cache = self.qns_channel.init_cache(batch=questions.batch_sizes[0])
         questions_embed, _ = self.qns_channel(embeds, cache)
         questions_embed = questions_embed[-1]
-        added = torch.cat((image_embed,questions_embed), 1) #concat the img and qns layers
+        
+        img_attn = self.atn_channel(image_embed, questions_embed)
+        # combining attention
+        image_embed = image_embed.view(b, 1, c, -1).expand(b, self.glimpse, c, 100)
+        img_attn = img_attn.view(b, self.glimpse, 1, -1).expand(b, self.glimpse, c, 100)
+        weighted = (image_embed * img_attn).sum(dim=3).view(b, -1)
+        
+        added = torch.cat([weighted, questions_embed], dim=1)
         output = self.resolve_fc(added)
         return output
     

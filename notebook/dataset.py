@@ -67,7 +67,7 @@ class COCODataset(Dataset):
         ans_list = [a['answer'] for a in qa[0]['answers']]
 #         print(ans_list)
         
-        ans_index_list = [self.answers.ans2idx[ans] for ans in ans_list if ans in self.answers.ans2idx.keys()]
+        ans_index_list = [self.answers(ans) for ans in ans_list] #if ans in self.answers.ans2idx.keys()]
         answer_tensor = torch.Tensor(ans_index_list)
         
         return question_tensor, image, answer_tensor     
@@ -92,4 +92,4 @@ def collate(batch):
     sorted_batch = sorted(batch, key=lambda x: len(x[0]), reverse=True) 
     question, image, answer = zip(*sorted_batch)
     
-    return torch.nn.utils.rnn.pack_sequence(question), torch.stack(image), answer
+    return torch.nn.utils.rnn.pack_sequence(question), torch.stack(image), torch.stack(answer)

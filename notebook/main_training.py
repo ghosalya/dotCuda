@@ -29,7 +29,7 @@ val_dataset = COCODataset(vocab=valvocab, answers=valanswers)
 
 
 # import network 
-from network_v5b import *
+from network_v6 import *
 import torch
 device = torch.device('cuda')
 
@@ -41,8 +41,8 @@ from trainer import VQATrainer
 
 trainer = VQATrainer(model, device)
 
-trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=128, #e_break=10000, 
-                                          save_every=1, epoch=1)
+trained_model, statistics = trainer.train(train_dataset, val_dataset, collate_fn=collate, batch_size=256, #e_break=10000, 
+                                          save_every=1, epoch=5, val_size=5000)
 
 with open('stats.st', 'wb') as statfile:
     pickle.dump(statistics, statfile)

@@ -47,7 +47,6 @@ def build_answers(annfile, quesfile):
     
     # Create an answer wrapper
     answer = Answer()
-    answer.add_ans('<unk>')
 
     # Add the words to the vocabulary.
     for i, ans in enumerate(answers):
