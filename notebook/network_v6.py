@@ -56,11 +56,17 @@ class QnsEmbedding(nn.Module):
         self.lstm = nn.LSTM(input_size = input_size, hidden_size = question_ftrs, num_layers = num_layers, batch_first = batch_first)
         self.num_layers = num_layers
         self.question_ftrs = question_ftrs
+        self.cache = None
         
-    def forward (self, inputs, cache):
+    def forward (self, inputs, cache=None):
+        # refresh cache everytime forward is called
+        if cache:
+            self.cache = cache
+        else:
+            self.cache = (t*0 for t in self.cache)
         inputs_data = self.tanh(inputs.data) 
         inputs = PackedSequence(inputs_data, inputs.batch_sizes)
-        output, (hn, cn) = self.lstm(inputs, cache)
+        output, (hn, cn) = self.lstm(inputs, self.cache)
         return hn, cn
         
     def init_cache(self, batch=1, use_gpu = True):
@@ -68,6 +74,7 @@ class QnsEmbedding(nn.Module):
         c0 = torch.zeros(self.num_layers, batch, self.question_ftrs)
         if use_gpu:
             h0, c0 = h0.cuda(), c0.cuda()
+        self.cache = (h0, c0)
         return (h0, c0)	
 
 '''
@@ -140,8 +147,9 @@ class ConcatNet(nn.Module):
         emb_qns = self.word_embeddings(questions.data)
         embeds = PackedSequence(emb_qns, questions.batch_sizes)
         
-        cache = self.qns_channel.init_cache(batch=questions.batch_sizes[0])
-        questions_embed, _ = self.qns_channel(embeds, cache)
+        if not self.qns_channel.cache: # if cache is not inititated
+            self.qns_channel.init_cache(batch=questions.batch_sizes[0])
+        questions_embed, _ = self.qns_channel(embeds)
         questions_embed = questions_embed[-1]
         
         if self.with_attention:
@@ -160,11 +168,11 @@ class ConcatNet(nn.Module):
     
     def parameters(self):
         if self.freeze_resnet:
-            all_params = [param for param in self.qns_channel.parameters()] \
-                         + [param for param in self.resolve_fc.parameters()] \
-                         + [param for param in self.word_embeddings.parameters()]
+            all_params = list(self.qns_channel.parameters()) \
+                         + list(self.resolve_fc.parameters()) \
+                         + list(self.word_embeddings.parameters())
             if self.with_attention:
-                all_params += [param for param in self.atn_channel.parameters()]
+                all_params += list(self.atn_channel.parameters())
             return all_params
         else:
             return super(ConcatNet, self).parameters()

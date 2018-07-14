@@ -195,7 +195,7 @@ class VQATrainer:
                 sub_idx = [k for k in range(10) if k != i]
                 label_subset = label[:, sub_idx]
                 correct_answers  = (pred.long() == label_subset.long())
-                corrects += correct_answers.sum(dim=1).clamp(max=3).sum() / (3 * label.size(0) * 10)
+                corrects += correct_answers.sum(dim=1).clamp(max=3).sum().float() / (3 * label.size(0) * 10)
             return corrects
         accuracy_fns['approve3ts'] = approve_by_3tensor
         return accuracy_fns
