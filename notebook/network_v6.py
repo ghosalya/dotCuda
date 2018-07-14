@@ -62,8 +62,10 @@ class QnsEmbedding(nn.Module):
         # refresh cache everytime forward is called
         if cache:
             self.cache = cache
+        elif inputs.batch_sizes[0] != self.cache[0].size(1):
+            self.init_cache(batch=inputs.batch_sizes[0])
         else:
-            self.cache = (t*0 for t in self.cache)
+            self.cache = [t*0 for t in self.cache]
         inputs_data = self.tanh(inputs.data) 
         inputs = PackedSequence(inputs_data, inputs.batch_sizes)
         output, (hn, cn) = self.lstm(inputs, self.cache)
@@ -74,7 +76,7 @@ class QnsEmbedding(nn.Module):
         c0 = torch.zeros(self.num_layers, batch, self.question_ftrs)
         if use_gpu:
             h0, c0 = h0.cuda(), c0.cuda()
-        self.cache = (h0, c0)
+        self.cache = [h0, c0]
         return (h0, c0)	
 
 '''

@@ -101,7 +101,7 @@ class VQATrainer:
             running_loss += batch_loss.item()
 
             # accuracy prediction
-            running_correct += self.accuracy_fn(outputs, labels) / len(dataloader)
+            running_correct += self.accuracy_fn(outputs, labels) / (len(labels) * len(dataloader))
 
             # backpropagation
             if mode == 'train':
@@ -182,7 +182,8 @@ class VQATrainer:
                     a_idx = [k for k in range(label_size) if k != j]
                     masked_label = label_answer[a_idx]
                     correct_tensor = (pred_answer.long() == masked_label.long())
-                    corrects += min(3, correct_tensor.sum().item()) / (3 * label_size * len(label))
+                corrects += correct_answers.sum(dim=1).clamp(max=3).sum().float() / (3 * 10) 
+                # dont divide by label size because it is divided outside
             return corrects
         accuracy_fns['approve3t'] = approve_by_3tuple
         
@@ -195,7 +196,7 @@ class VQATrainer:
                 sub_idx = [k for k in range(10) if k != i]
                 label_subset = label[:, sub_idx]
                 correct_answers  = (pred.long() == label_subset.long())
-                corrects += correct_answers.sum(dim=1).clamp(max=3).sum().float() / (3 * label.size(0) * 10)
+                corrects += correct_answers.sum(dim=1).clamp(max=3).sum().float() / (3 * 10)
             return corrects
         accuracy_fns['approve3ts'] = approve_by_3tensor
         return accuracy_fns
