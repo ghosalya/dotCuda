@@ -63,10 +63,11 @@ class EnterQuestionScreen(Screen):
                 ])
         device = torch.device('cuda')
         vocab_size = len(vocab)
-        self.model = ConcatNet(vocab_size, with_attention=False).to(device)
+        self.model = ConcatNet(vocab_size, with_attention=True).to(device)
 
-        state_dict = torch.load('model_epoch0.pt')
+        state_dict = torch.load('default_model.pt')
         self.model.load_state_dict(state_dict)
+        self.model.eval()
         
         
     def changeImg2_Tensor(self):
@@ -102,13 +103,14 @@ class EnterQuestionScreen(Screen):
         logging.info(qns)
         qns, img, _ = collate([(qns, image, torch.Tensor([0]))])
         output = self.model(img.cuda(), qns.long().cuda())
-        _, pred = output.topk(10)
+        confidence, pred = output.topk(10)
         ans = [self.answers.idx2ans[j.item()] for j in pred[0]]
+        logging.info(confidence)
         if '<unk>' in ans:
             ans.remove('<unk>')
         logging.info(ans)
-        firstAns = 'I think it is ' +ans[0]
-        secondPart = '\n But these are my other predictions: ' + ' or '.join(ans [1:4])
+        firstAns = 'I think it is ' + ans[0] + ' with ' + str(round(confidence[0][0].item(), 2)) + ' confidence'
+        secondPart = '\nBut these are my other predictions: ' + ' or '.join(ans [1:4])
         self.ids.ans.text = firstAns + secondPart
         
 class TestApp(App):
