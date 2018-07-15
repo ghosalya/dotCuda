@@ -29,11 +29,11 @@ class VQATrainer:
         adam_optimizer = torch.optim.Adam(self.model.parameters(), learnrate)
 
         if collate_fn:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16, collate_fn=collate_fn)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16, collate_fn=collate_fn)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=24, collate_fn=collate_fn)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=24, collate_fn=collate_fn)
         else:
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=16)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=24)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=24)
 
         self.statistics = {'train-losses':[],
                            'val-losses': [],
@@ -131,12 +131,12 @@ class VQATrainer:
     def test_epoch(self, dataloader, print_every=1, e_break=None):
         return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
     
-    def get_losses(self, outputs, labels):
+    def get_losses(self, outputs, labels, epsilon=1e-12):
         '''
         This function expects labels to be a tensor of batchX10
         '''
         total_loss = None
-        outputs = outputs.log()
+        outputs = (outputs + epsilon).log()
         for i in range(10):
             if total_loss is None:
                 total_loss = self.criterion(outputs, labels[:,i].long())
