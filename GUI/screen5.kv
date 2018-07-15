@@ -29,6 +29,7 @@
             on_press: root.manager.current = 'enterqns'
         
 <EnterQuestionScreen>:
+    id: enterquestion
     BoxLayout:
         orientation: 'vertical'
         Image:
@@ -44,14 +45,20 @@
                 font_size: 20
                 size_hint: 0.8, 1
             Button: 
+                id: enterbutton
                 text: 'Enter Question'
                 font_size: 20
                 size_hint: 0.2, 1
+                on_press: 
+                    enterquestion.modelpass()
+                    
         Label:
+            id: ans
             text: 'Predicted Answer is...'
             font_size: 25
             size_hint: 1, 0.3
             color: 100,50,20,15
+            
         Button:
             text: 'Back to Menu'
             font_size: 20
