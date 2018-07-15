@@ -4,9 +4,10 @@
         Label: 
             text: 'What do you want to do?'
             font_size: 40
-           
+            color: 100,50,20,15
         Button:
             text: 'Select Image from Folder'
+            font_size: 20
             on_press:
                 root.manager.transition.direction = 'left'
                 root.manager.current = 'selectimg'
@@ -24,6 +25,7 @@
             source: ""
         Button:
             text: 'Compute'
+            font_size: 20
             on_press: root.manager.current = 'enterqns'
         
 <EnterQuestionScreen>:
@@ -32,14 +34,26 @@
         Image:
             id: image2
             source: ""
-        TextInput:
-            id: input
-            text: 'hello'
-            font_size: 30
-        Button: 
-            text: 'Enter Question'
+            size_hint: 1, 0.3
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, 0.3
+            TextInput:
+                id: input
+                text: 'Input Question Here'
+                font_size: 20
+                size_hint: 0.8, 1
+            Button: 
+                text: 'Enter Question'
+                font_size: 20
+                size_hint: 0.2, 1
         Label:
-            text: 'Predicted Answer'
+            text: 'Predicted Answer is...'
+            font_size: 25
+            size_hint: 1, 0.3
+            color: 100,50,20,15
         Button:
             text: 'Back to Menu'
+            font_size: 20
+            size_hint: 1, 0.1
             on_press: root.manager.current = 'menu'
