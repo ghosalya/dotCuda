@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 class VQATrainer:
     def __init__(self, model, device, accuracy_fn='approve3ts'):
         self.model = model
-        self.criterion = torch.nn.CrossEntropyLoss()
+        self.criterion = torch.nn.NLLLoss()
         self.device = device
 
         accuracy_fn_list = self.get_accuracy_fns()
@@ -86,6 +86,7 @@ class VQATrainer:
         iterr = 0
         for data in dataloader:
             iterr += 1
+            if optimizer: optimizer.zero_grad()
 
             # wrapping data
             question = data[0].long().cuda()
@@ -105,7 +106,6 @@ class VQATrainer:
 
             # backpropagation
             if mode == 'train':
-                optimizer.zero_grad()
                 batch_loss.backward()
                 optimizer.step()
 
@@ -136,6 +136,7 @@ class VQATrainer:
         This function expects labels to be a tensor of batchX10
         '''
         total_loss = None
+        outputs = outputs.log()
         for i in range(10):
             if total_loss is None:
                 total_loss = self.criterion(outputs, labels[:,i].long())
