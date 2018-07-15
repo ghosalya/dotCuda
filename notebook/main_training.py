@@ -24,8 +24,8 @@ with open(vocab_path, 'rb') as f:
     
 from dataset import *
 
-train_dataset = COCODataset(vocab=vocab, answers=answers)
-val_dataset = COCODataset(vocab=valvocab, answers=valanswers)
+train_dataset = COCODataset(vocab=vocab, answers=answers).subset(count=80000)
+val_dataset = COCODataset(vocab=valvocab, answers=valanswers).subset(count=10000)
 print('\nTraining on', len(train_dataset), 'train data and', len(val_dataset), 'validation data.\n')
 
 

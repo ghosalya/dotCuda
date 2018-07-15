@@ -102,7 +102,7 @@ class VQATrainer:
             running_loss += batch_loss.item()
 
             # accuracy prediction
-            running_correct += self.accuracy_fn(outputs, labels) / (len(labels) * len(dataloader))
+            running_correct += self.accuracy_fn(outputs, labels) #/ (len(labels) * len(dataloader))
 
             # backpropagation
             if mode == 'train':
@@ -110,28 +110,28 @@ class VQATrainer:
                 optimizer.step()
 
             self.print_every(iterr, len(dataloader), print_every, 
-                             running_loss, running_correct)
+                             running_loss / iterr, running_correct / (len(labels) * iterr))
 
             if iterr % plot_every == 0:
-                loss_list.append(running_loss)
-                correct_list.append(running_correct)
+                loss_list.append(running_loss / iterr)
+                correct_list.append(running_correct / (len(labels) * iterr))
                 
             if e_break:
                 if iterr >= e_break:
                     break
         
         epoch_end = time.clock()
-        accuracy = running_correct 
+        accuracy = running_correct / (len(labels) * iterr)
 
         print('   >> Epoch finished with loss {:.5f} and accuracy {:.3f} in {:.4f}s'\
-              .format(running_loss, accuracy, epoch_end-epoch_start))
+              .format(running_loss / len(dataloader), accuracy, epoch_end-epoch_start))
 
-        return self.model, running_loss, accuracy, loss_list, correct_list
+        return self.model, running_loss / len(dataloader), accuracy, loss_list, correct_list
 
     def test_epoch(self, dataloader, print_every=1, e_break=None):
         return self.train_epoch(dataloader, optimizer=None, mode='test', e_break=e_break)
     
-    def get_losses(self, outputs, labels, epsilon=1e-12):
+    def get_losses_loop(self, outputs, labels, epsilon=1e-12):
         '''
         This function expects labels to be a tensor of batchX10
         '''
@@ -143,6 +143,12 @@ class VQATrainer:
             else:
                 total_loss += self.criterion(outputs, labels[:,i].long())
         return total_loss / 10
+    
+    def get_losses(self, outputs, labels, epsilon=1e-12):
+        n, c = outputs.size()
+        outputs = (outputs + epsilon).log().view(n,c,1,1).repeat(1,1,1,10)
+        labels = labels.view(n, 1, 10)
+        return self.criterion(outputs, labels.long())
 
     def get_accuracy_fns(self):
         '''
